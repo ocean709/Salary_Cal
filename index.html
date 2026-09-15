@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>월루 계산기 | 월급루팡 실시간 급여 측정기</title>
+  <meta name="description" content="근무시간 동안 초당 실시간으로 증가하는 나의 연봉, 월급, 일급을 시각적으로 측정하고 카운팅하는 월루 계산기">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@500;700;800&family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Font Awesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app-background">
+    <div class="bg-glow blob-1"></div>
+    <div class="bg-glow blob-2"></div>
+    <div class="bg-glow blob-3"></div>
+  </div>
+
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="logo-icon">
+          <i class="fa-solid fa-bolt-lightning"></i>
+        </div>
+        <div class="logo-text">
+          <h1>월루 계산기</h1>
+          <p>월급루팡 실시간 수익 카운터</p>
+        </div>
+      </div>
+
+      <div class="header-controls">
+        <!-- Live Status Pill -->
+        <div id="liveStatusBadge" class="status-badge status-working">
+          <span class="pulse-dot"></span>
+          <span id="statusText">근무 중 (초당 수익 적립 중)</span>
+        </div>
+
+        <!-- Mode & Settings Buttons -->
+        <button id="simModeBtn" class="btn btn-glass" title="체험 모드 토글">
+          <i class="fa-solid fa-gamepad"></i>
+          <span id="simBtnText">시뮬레이션 모드 OFF</span>
+        </button>
+
+        <button id="openSettingsBtn" class="btn btn-glass btn-icon" title="설정">
+          <i class="fa-solid fa-gear"></i>
+        </button>
+      </div>
+    </header>
+
+    <!-- Time & Clock Banner -->
+    <section class="time-banner">
+      <div class="banner-item">
+        <span class="label"><i class="fa-regular fa-clock"></i> 현재 시간</span>
+        <span id="currentTimeDisplay" class="value-mono">00:00:00</span>
+      </div>
+      <div class="banner-divider"></div>
+      <div class="banner-item">
+        <span class="label"><i class="fa-solid fa-calendar-day"></i> 근무 상태</span>
+        <span id="scheduleStatusDisplay" class="value-highlight">주5일 8시간 근무제 (08:30 ~ 18:00)</span>
+      </div>
+      <div class="banner-divider"></div>
+      <div class="banner-item">
+        <span class="label"><i class="fa-solid fa-coins"></i> 초당 적립 속도</span>
+        <span id="perSecondRateDisplay" class="value-rate">+9.00 원 / 초</span>
+      </div>
+    </section>
+
+    <!-- Main Navigation Tabs -->
+    <nav class="tab-navigation">
+      <button class="tab-btn active" data-tab="monthly" id="tabMonthlyBtn">
+        <i class="fa-solid fa-calendar-check"></i>
+        <div class="tab-info">
+          <span class="tab-title">1. 월급</span>
+          <span class="tab-sub">이번 달 실시간 누적</span>
+        </div>
+      </button>
+
+      <button class="tab-btn" data-tab="annual" id="tabAnnualBtn">
+        <i class="fa-solid fa-trophy"></i>
+        <div class="tab-info">
+          <span class="tab-title">2. 연봉</span>
+          <span class="tab-sub">올해 실시간 누적</span>
+        </div>
+      </button>
+
+      <button class="tab-btn" data-tab="daily" id="tabDailyBtn">
+        <i class="fa-solid fa-sun"></i>
+        <div class="tab-info">
+          <span class="tab-title">3. 일급</span>
+          <span class="tab-sub">오늘 8시간 실시간 적립</span>
+        </div>
+      </button>
+    </nav>
+
+    <!-- Main Content Display -->
+    <main class="main-display">
+      <!-- Main Counter Hero Card -->
+      <div class="card hero-counter-card">
+        <div class="hero-header">
+          <div class="hero-title-group">
+            <span id="heroBadge" class="hero-badge">월급 (Monthly)</span>
+            <h2 id="heroTitle">이번 달 현재까지의 실시간 적립 급여</h2>
+          </div>
+          <div class="live-ticker-indicator">
+            <span class="live-tag"><i class="fa-solid fa-wifi"></i> LIVE TICKER</span>
+          </div>
+        </div>
+
+        <div class="hero-counter-wrap">
+          <div class="currency-symbol">₩</div>
+          <div class="counter-display">
+            <span id="mainCounterInt" class="counter-integer">5,616,666</span>
+            <span class="counter-decimal-point">.</span>
+            <span id="mainCounterDec" class="counter-decimal">00</span>
+          </div>
+          <span class="currency-unit">원</span>
+        </div>
+
+        <!-- Realtime Secondary Increment Sub-counter -->
+        <div class="hero-subcounter">
+          <span class="sub-label">오늘 근무로 증가한 금액:</span>
+          <span id="todayEarnedDisplay" class="sub-value">+₩ 0.00</span>
+          <span id="speedPulse" class="speed-pulse"><i class="fa-solid fa-caret-up"></i> LIVE</span>
+        </div>
+
+        <!-- Progress Bar Barometer -->
+        <div class="progress-section">
+          <div class="progress-header">
+            <span id="progressTitle" class="progress-title">이번 달 근무 달성률</span>
+            <span id="progressPercent" class="progress-percent">0.00%</span>
+          </div>
+          <div class="progress-bar-container">
+            <div id="progressBarFill" class="progress-bar-fill" style="width: 0%;">
+              <div class="bar-glow"></div>
+            </div>
+          </div>
+          <div class="progress-footer">
+            <span id="progressStartLabel">월 초 (0원)</span>
+            <span id="progressTargetLabel">기준 월급: ₩5,616,667</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Detail Grid Section -->
+      <div class="grid-container">
+        <!-- Card 1: Earning Breakdown Rates -->
+        <div class="card stat-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-calculator"></i> 단위별 적립 속도</h3>
+            <span class="card-tag">기준 연봉 6,740만원</span>
+          </div>
+          <div class="stat-list">
+            <div class="stat-item">
+              <div class="stat-label">
+                <i class="fa-solid fa-stopwatch text-emerald"></i> 초당 적립액
+              </div>
+              <div class="stat-value" id="ratePerSec">₩ 9.00 원</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">
+                <i class="fa-solid fa-clock text-cyan"></i> 분당 적립액
+              </div>
+              <div class="stat-value" id="ratePerMin">₩ 540.06 원</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">
+                <i class="fa-solid fa-business-time text-blue"></i> 시급 (실 근무)
+              </div>
+              <div class="stat-value" id="ratePerHour">₩ 32,404 원</div>
+            </div>
+            <div class="stat-item highlight-item">
+              <div class="stat-label">
+                <i class="fa-solid fa-sun text-amber"></i> 일급 (8시간 기준)
+              </div>
+              <div class="stat-value" id="ratePerDay">₩ 259,231 원</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 2: Work Schedule Timeline -->
+        <div class="card timeline-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-timeline"></i> 오늘 근무 타임라인</h3>
+            <span id="todayDateText" class="card-tag">2026.09.14 (월)</span>
+          </div>
+          <div class="timeline-body">
+            <div class="timeline-step step-start" id="stepStart">
+              <div class="step-icon"><i class="fa-solid fa-building-user"></i></div>
+              <div class="step-content">
+                <span class="step-time">08:30</span>
+                <span class="step-name">출근 & 업무 시작</span>
+              </div>
+            </div>
+            <div class="timeline-line"></div>
+            <div class="timeline-step step-lunch" id="stepLunch">
+              <div class="step-icon"><i class="fa-solid fa-utensils"></i></div>
+              <div class="step-content">
+                <span class="step-time">11:30 ~ 13:00</span>
+                <span class="step-name">점심 및 휴식 (1.5시간)</span>
+              </div>
+            </div>
+            <div class="timeline-line"></div>
+            <div class="timeline-step step-end" id="stepEnd">
+              <div class="step-icon"><i class="fa-solid fa-house-chimney-user"></i></div>
+              <div class="step-content">
+                <span class="step-time">18:00</span>
+                <span class="step-name">퇴근 (총 8시간 소요)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="timeline-summary">
+            <div class="summary-box">
+              <span class="box-label">오늘 지체 없이 번 돈</span>
+              <span class="box-value" id="todayEarnedSum">₩ 0</span>
+            </div>
+            <div class="summary-box">
+              <span class="box-label">남은 근무시간</span>
+              <span class="box-value" id="remainingTimeText">0시간 0분</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Card 3: Fun Milestone Equivalents -->
+        <div class="card fun-milestones-card">
+          <div class="card-header">
+            <h3><i class="fa-solid fa-mug-hot"></i> 근무 시간별 실생활 비교</h3>
+            <span class="card-tag">내 근로 가치 측정</span>
+          </div>
+          <div class="milestone-list">
+            <div class="milestone-item">
+              <div class="item-icon coffee"><i class="fa-solid fa-mug-saucer"></i></div>
+              <div class="item-details">
+                <span class="item-title">아메리카노 1잔 (4,500원)</span>
+                <span class="item-time" id="timeForCoffee">약 8분 20초 근무</span>
+              </div>
+              <div class="item-status" id="statusForCoffee">
+                <span class="status-badge-mini">달성 가능</span>
+              </div>
+            </div>
+
+            <div class="milestone-item">
+              <div class="item-icon lunch"><i class="fa-solid fa-bowl-food"></i></div>
+              <div class="item-details">
+                <span class="item-title">든든한 점심 밥값 (12,000원)</span>
+                <span class="item-time" id="timeForLunch">약 22분 13초 근무</span>
+              </div>
+              <div class="item-status" id="statusForLunch">
+                <span class="status-badge-mini">달성 가능</span>
+              </div>
+            </div>
+
+            <div class="milestone-item">
+              <div class="item-icon chicken"><i class="fa-solid fa-drumstick-bite"></i></div>
+              <div class="item-details">
+                <span class="item-title">치킨 한 마리 (22,000원)</span>
+                <span class="item-time" id="timeForChicken">약 40분 44초 근무</span>
+              </div>
+              <div class="item-status" id="statusForChicken">
+                <span class="status-badge-mini">달성 가능</span>
+              </div>
+            </div>
+
+            <div class="milestone-item">
+              <div class="item-icon airpods"><i class="fa-solid fa-headphones"></i></div>
+              <div class="item-details">
+                <span class="item-title">무선 이어폰 (250,000원)</span>
+                <span class="item-time" id="timeForAirpods">약 7시간 43분 근무 (약 1일)</span>
+              </div>
+              <div class="item-status" id="statusForAirpods">
+                <span class="status-badge-mini">달성 가능</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>© 2026 월루 계산기 (월급루팡 실시간 급여 측정기). 주5일 8시간 근무 기준 (연봉 67,400,000원 기준 자동 산출)</p>
+    </footer>
+  </div>
+
+  <!-- Settings Modal -->
+  <div id="settingsModal" class="modal-backdrop">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3><i class="fa-solid fa-sliders"></i> 근무 조건 & 급여 설정</h3>
+        <button id="closeSettingsBtn" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <form id="settingsForm">
+          <div class="form-group">
+            <label for="inputAnnualSalary">기준 연봉 (원)</label>
+            <div class="input-with-unit">
+              <input type="number" id="inputAnnualSalary" value="67400000" step="100000" min="1000000">
+              <span class="unit">원</span>
+            </div>
+            <span class="help-text">기본 설정값: 67,400,000 원</span>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="inputWorkStart">출근 시간</label>
+              <input type="time" id="inputWorkStart" value="08:30">
+            </div>
+            <div class="form-group">
+              <label for="inputWorkEnd">퇴근 시간</label>
+              <input type="time" id="inputWorkEnd" value="18:00">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label for="inputLunchStart">점심 시작</label>
+              <input type="time" id="inputLunchStart" value="11:30">
+            </div>
+            <div class="form-group">
+              <label for="inputLunchEnd">점심 종료</label>
+              <input type="time" id="inputLunchEnd" value="13:00">
+            </div>
+          </div>
+
+          <div class="modal-actions">
+            <button type="button" id="resetSettingsBtn" class="btn btn-secondary">기본값 복원</button>
+            <button type="submit" class="btn btn-primary">설정 저장 적용</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

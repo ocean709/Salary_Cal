@@ -6,7 +6,7 @@
 
 // Global State & Settings
 const state = {
-  annualSalary: 67400000,
+  annualSalary: 100000000,
   workStart: "08:30",
   lunchStart: "11:30",
   lunchEnd: "13:00",
@@ -22,7 +22,8 @@ function loadSettings() {
   if (saved) {
     try {
       const parsed = JSON.parse(saved);
-      state.annualSalary = Number(parsed.annualSalary) || 67400000;
+      const savedSalary = Number(parsed.annualSalary);
+      state.annualSalary = (savedSalary && savedSalary !== 67400000) ? savedSalary : 100000000;
       state.workStart = parsed.workStart || "08:30";
       state.lunchStart = parsed.lunchStart || "11:30";
       state.lunchEnd = parsed.lunchEnd || "13:00";
@@ -471,7 +472,7 @@ function initEvents() {
   if (settingsForm) {
     settingsForm.addEventListener("submit", (e) => {
       e.preventDefault();
-      state.annualSalary = Number(document.getElementById("inputAnnualSalary").value) || 67400000;
+      state.annualSalary = Number(document.getElementById("inputAnnualSalary").value) || 100000000;
       state.workStart = document.getElementById("inputWorkStart").value;
       state.workEnd = document.getElementById("inputWorkEnd").value;
       state.lunchStart = document.getElementById("inputLunchStart").value;
@@ -485,7 +486,7 @@ function initEvents() {
   // Reset Settings
   if (resetBtn) {
     resetBtn.addEventListener("click", () => {
-      state.annualSalary = 67400000;
+      state.annualSalary = 100000000;
       state.workStart = "08:30";
       state.lunchStart = "11:30";
       state.lunchEnd = "13:00";

@@ -298,6 +298,17 @@
         <button id="closeSettingsBtn" class="modal-close-btn">&times;</button>
       </div>
       <div class="modal-body">
+        <!-- Presets -->
+        <div class="preset-section">
+          <label class="preset-title"><i class="fa-solid fa-bolt"></i> 근무 시간 빠른 선택 (프리셋)</label>
+          <div class="preset-buttons">
+            <button type="button" class="preset-btn" data-preset="standard">08:30~18:00 (기본 8h)</button>
+            <button type="button" class="preset-btn" data-preset="nine6">09:00~18:00 (9 to 6)</button>
+            <button type="button" class="preset-btn" data-preset="eight5">08:00~17:00 (8 to 5)</button>
+            <button type="button" class="preset-btn" data-preset="ten7">10:00~19:00 (10 to 7)</button>
+          </div>
+        </div>
+
         <form id="settingsForm">
           <div class="form-group">
             <label for="inputAnnualSalary">기준 연봉 (원)</label>
@@ -308,6 +319,21 @@
             <span class="help-text">기본 설정값: 100,000,000 원</span>
           </div>
 
+          <!-- Work Days Selector -->
+          <div class="form-group">
+            <label>근무 요일 선택</label>
+            <div class="work-days-selector">
+              <button type="button" class="day-pill active" data-day="1">월</button>
+              <button type="button" class="day-pill active" data-day="2">화</button>
+              <button type="button" class="day-pill active" data-day="3">수</button>
+              <button type="button" class="day-pill active" data-day="4">목</button>
+              <button type="button" class="day-pill active" data-day="5">금</button>
+              <button type="button" class="day-pill" data-day="6">토</button>
+              <button type="button" class="day-pill" data-day="0">일</button>
+            </div>
+          </div>
+
+          <!-- Work Hours Row -->
           <div class="form-row">
             <div class="form-group">
               <label for="inputWorkStart">출근 시간</label>
@@ -319,7 +345,15 @@
             </div>
           </div>
 
-          <div class="form-row">
+          <!-- Lunch / Break Option -->
+          <div class="form-group">
+            <div class="checkbox-group">
+              <input type="checkbox" id="inputHasLunch" checked>
+              <label for="inputHasLunch">점심 & 휴식 시간 차감 적용</label>
+            </div>
+          </div>
+
+          <div class="form-row" id="lunchRow">
             <div class="form-group">
               <label for="inputLunchStart">점심 시작</label>
               <input type="time" id="inputLunchStart" value="11:30">
@@ -328,6 +362,12 @@
               <label for="inputLunchEnd">점심 종료</label>
               <input type="time" id="inputLunchEnd" value="13:00">
             </div>
+          </div>
+
+          <!-- Dynamic Calculation Summary Box -->
+          <div class="calc-summary-box">
+            <i class="fa-solid fa-calculator"></i>
+            <span id="modalCalcSummary">일일 실근무 8시간 0분 (주 5일, 총 40시간/주)</span>
           </div>
 
           <div class="modal-actions">

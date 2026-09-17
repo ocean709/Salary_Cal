@@ -1,7 +1,7 @@
 /**
- * Real-Time Salary Tracker & Evaluator
+ * Real-Time Salary Tracker & Evaluator (월루 계산기)
  * Author: Antigravity AI
- * Core Logic & Live Rendering Engine
+ * Core Logic & Live Rendering Engine with Full Schedule Customization
  */
 
 // Global State & Settings
@@ -11,6 +11,8 @@ const state = {
   lunchStart: "11:30",
   lunchEnd: "13:00",
   workEnd: "18:00",
+  hasLunch: true,
+  workDays: [1, 2, 3, 4, 5], // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat, 0=Sun
   currentTab: "monthly", // 'monthly' | 'annual' | 'daily'
   simMode: false,
   simTimeSeconds: 0, // Used for simulation tick
@@ -28,6 +30,10 @@ function loadSettings() {
       state.lunchStart = parsed.lunchStart || "11:30";
       state.lunchEnd = parsed.lunchEnd || "13:00";
       state.workEnd = parsed.workEnd || "18:00";
+      state.hasLunch = parsed.hasLunch !== undefined ? Boolean(parsed.hasLunch) : true;
+      if (Array.isArray(parsed.workDays) && parsed.workDays.length > 0) {
+        state.workDays = parsed.workDays.map(Number);
+      }
     } catch (e) {
       console.error("Failed to load settings from storage", e);
     }
@@ -41,35 +47,48 @@ function saveSettings() {
     lunchStart: state.lunchStart,
     lunchEnd: state.lunchEnd,
     workEnd: state.workEnd,
+    hasLunch: state.hasLunch,
+    workDays: state.workDays,
   }));
 }
 
 // Utility: Time String "HH:MM" to seconds from midnight
 function parseTimeToSeconds(timeStr) {
+  if (!timeStr) return 0;
   const [h, m] = timeStr.split(":").map(Number);
   return h * 3600 + m * 60;
 }
 
-// Calculate Helper Rates
+// Calculate Helper Rates based on current state
 function getRates() {
   const annual = state.annualSalary;
   const monthly = annual / 12;
-  const workDaysPerYear = 260; // 52 weeks * 5 days
-  const daily = annual / workDaysPerYear; // 259,230.77 KRW
+  const daysPerWeek = Math.max(1, state.workDays.length);
+  const workDaysPerYear = daysPerWeek * 52; // e.g. 5 days * 52 = 260 days
+  const daily = annual / workDaysPerYear;
 
   const startSec = parseTimeToSeconds(state.workStart);
   const lunchStartSec = parseTimeToSeconds(state.lunchStart);
   const lunchEndSec = parseTimeToSeconds(state.lunchEnd);
   const endSec = parseTimeToSeconds(state.workEnd);
 
-  // Active work seconds in one day
-  const morningWorkSec = Math.max(0, lunchStartSec - startSec);
-  const afternoonWorkSec = Math.max(0, endSec - lunchEndSec);
-  const totalDailyWorkSec = morningWorkSec + afternoonWorkSec; // Default 28,800 sec (8 hours)
+  let morningWorkSec = 0;
+  let afternoonWorkSec = 0;
+  let totalDailyWorkSec = 0;
 
-  const hourly = daily / (totalDailyWorkSec / 3600); // Daily / 8h
+  if (state.hasLunch && lunchStartSec > startSec && lunchEndSec > lunchStartSec) {
+    morningWorkSec = Math.max(0, lunchStartSec - startSec);
+    afternoonWorkSec = Math.max(0, endSec - lunchEndSec);
+    totalDailyWorkSec = morningWorkSec + afternoonWorkSec;
+  } else {
+    morningWorkSec = Math.max(0, endSec - startSec);
+    afternoonWorkSec = 0;
+    totalDailyWorkSec = morningWorkSec;
+  }
+
+  const hourly = totalDailyWorkSec > 0 ? daily / (totalDailyWorkSec / 3600) : 0;
   const perMin = hourly / 60;
-  const perSec = totalDailyWorkSec > 0 ? daily / totalDailyWorkSec : 0; // ~9.001 KRW/sec
+  const perSec = totalDailyWorkSec > 0 ? daily / totalDailyWorkSec : 0;
 
   return {
     annual,
@@ -85,6 +104,8 @@ function getRates() {
     morningWorkSec,
     afternoonWorkSec,
     totalDailyWorkSec,
+    daysPerWeek,
+    workDaysPerYear,
   };
 }
 
@@ -93,17 +114,17 @@ function getWorkStatus(nowDate, rates) {
   if (state.simMode) {
     return {
       status: "WORKING",
-      text: "🎮 시뮬레이션 근무 중 (+9.00원/초 적립 중)",
+      text: `🎮 시뮬레이션 근무 중 (+${rates.perSec.toFixed(2)}원/초 적립 중)`,
       badgeClass: "status-sim",
       isWorking: true,
     };
   }
 
   const dayOfWeek = nowDate.getDay(); // 0 = Sun, 6 = Sat
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
+  if (!state.workDays.includes(dayOfWeek)) {
     return {
       status: "WEEKEND",
-      text: "🏖️ 주말 (휴무일 - 오늘 수익 적립 완료)",
+      text: "🏖️ 휴무일 (오늘 수익 적립 완료)",
       badgeClass: "status-offwork",
       isWorking: false,
     };
@@ -118,24 +139,17 @@ function getWorkStatus(nowDate, rates) {
       badgeClass: "status-offwork",
       isWorking: false,
     };
-  } else if (currentSec >= rates.startSec && currentSec < rates.lunchStartSec) {
-    return {
-      status: "MORNING_WORK",
-      text: "🟢 오전 근무 중 (초당 수익 적립 중)",
-      badgeClass: "status-working",
-      isWorking: true,
-    };
-  } else if (currentSec >= rates.lunchStartSec && currentSec < rates.lunchEndSec) {
+  } else if (state.hasLunch && currentSec >= rates.lunchStartSec && currentSec < rates.lunchEndSec) {
     return {
       status: "LUNCH_BREAK",
       text: "🍱 점심 & 휴식 시간 (적립 일시정지)",
       badgeClass: "status-break",
       isWorking: false,
     };
-  } else if (currentSec >= rates.lunchEndSec && currentSec < rates.endSec) {
+  } else if (currentSec >= rates.startSec && currentSec < rates.endSec) {
     return {
-      status: "AFTERNOON_WORK",
-      text: "🟢 오후 근무 중 (초당 수익 적립 중)",
+      status: "WORKING",
+      text: `🟢 근무 중 (초당 ${rates.perSec.toFixed(2)}원 적립 중)`,
       badgeClass: "status-working",
       isWorking: true,
     };
@@ -152,37 +166,44 @@ function getWorkStatus(nowDate, rates) {
 // Compute Elapsed Work Seconds for today
 function getElapsedWorkSecondsToday(nowDate, rates) {
   if (state.simMode) {
-    // In simulation mode, cycle through a work day (0 to totalDailyWorkSec)
-    return state.simTimeSeconds % rates.totalDailyWorkSec;
+    return rates.totalDailyWorkSec > 0 ? (state.simTimeSeconds % rates.totalDailyWorkSec) : 0;
   }
 
   const dayOfWeek = nowDate.getDay();
-  if (dayOfWeek === 0 || dayOfWeek === 6) {
-    return rates.totalDailyWorkSec; // Full day earned for weekend display
+  if (!state.workDays.includes(dayOfWeek)) {
+    return rates.totalDailyWorkSec; // Full day earned on non-work days
   }
 
   const currentSec = nowDate.getHours() * 3600 + nowDate.getMinutes() * 60 + nowDate.getSeconds() + nowDate.getMilliseconds() / 1000;
 
   if (currentSec <= rates.startSec) {
     return 0;
-  } else if (currentSec > rates.startSec && currentSec <= rates.lunchStartSec) {
+  } else if (currentSec >= rates.endSec) {
+    return rates.totalDailyWorkSec;
+  }
+
+  if (!state.hasLunch) {
+    return Math.min(rates.totalDailyWorkSec, currentSec - rates.startSec);
+  }
+
+  if (currentSec > rates.startSec && currentSec <= rates.lunchStartSec) {
     return currentSec - rates.startSec;
   } else if (currentSec > rates.lunchStartSec && currentSec <= rates.lunchEndSec) {
-    return rates.morningWorkSec; // Cap at end of morning
+    return rates.morningWorkSec;
   } else if (currentSec > rates.lunchEndSec && currentSec <= rates.endSec) {
     return rates.morningWorkSec + (currentSec - rates.lunchEndSec);
   } else {
-    return rates.totalDailyWorkSec; // 100% finished
+    return rates.totalDailyWorkSec;
   }
 }
 
-// Calculate work days in a specific month
+// Calculate work days in a specific month based on selected state.workDays
 function getWorkDaysInMonth(year, month) {
   const totalDays = new Date(year, month + 1, 0).getDate();
   let workDays = 0;
   for (let day = 1; day <= totalDays; day++) {
     const d = new Date(year, month, day).getDay();
-    if (d !== 0 && d !== 6) workDays++;
+    if (state.workDays.includes(d)) workDays++;
   }
   return workDays;
 }
@@ -195,7 +216,7 @@ function getPastWorkDaysInMonth(nowDate) {
   let pastDays = 0;
   for (let day = 1; day < currentDay; day++) {
     const d = new Date(year, month, day).getDay();
-    if (d !== 0 && d !== 6) pastDays++;
+    if (state.workDays.includes(d)) pastDays++;
   }
   return pastDays;
 }
@@ -221,19 +242,28 @@ function updateUI() {
   const now = new Date();
   const rates = getRates();
 
-  // If simulation mode, advance simTimeSeconds
   if (state.simMode) {
     state.simTimeSeconds += 0.05; // 20 updates/sec -> +1 sec per real sec
   }
 
-  // 1. Banner Clock & Rates Update
+  // 1. Clock & Rates Update
   const timeDisplay = document.getElementById("currentTimeDisplay");
   if (timeDisplay) timeDisplay.textContent = formatTimeHMS(now);
 
   const rateDisplay = document.getElementById("perSecondRateDisplay");
   if (rateDisplay) rateDisplay.textContent = `+${rates.perSec.toFixed(2)} 원 / 초`;
 
-  // 2. Status Badge Update
+  // 2. Schedule Banner Update
+  const scheduleDisplay = document.getElementById("scheduleStatusDisplay");
+  if (scheduleDisplay) {
+    const totalDailyHours = (rates.totalDailyWorkSec / 3600).toFixed(1);
+    const breakHoursText = state.hasLunch 
+      ? `, 휴식 ${((rates.lunchEndSec - rates.lunchStartSec) / 3600).toFixed(1)}h`
+      : "";
+    scheduleDisplay.textContent = `주${rates.daysPerWeek}일 (${state.workStart} ~ ${state.workEnd}${breakHoursText} | 일 ${totalDailyHours}시간)`;
+  }
+
+  // 3. Status Badge Update
   const statusInfo = getWorkStatus(now, rates);
   const badgeEl = document.getElementById("liveStatusBadge");
   const statusTextEl = document.getElementById("statusText");
@@ -242,11 +272,11 @@ function updateUI() {
     statusTextEl.textContent = statusInfo.text;
   }
 
-  // 3. Calculate Today's Work Earnings
+  // 4. Calculate Today's Work Earnings
   const elapsedSecToday = getElapsedWorkSecondsToday(now, rates);
   const todayEarned = elapsedSecToday * rates.perSec;
 
-  // 4. Update Main Counter & Progress Bar based on Active Tab
+  // 5. Update Main Counter & Progress Bar based on Active Tab
   let mainVal = 0;
   let targetVal = 0;
   let percent = 0;
@@ -261,12 +291,11 @@ function updateUI() {
     heroTitleText = "이번 달 현재까지의 실시간 적립 월급";
     progressTitleText = "이번 달 근무 달성률";
 
-    const totalWorkDaysInMonth = getWorkDaysInMonth(now.getFullYear(), now.getMonth());
+    const totalWorkDaysInMonth = Math.max(1, getWorkDaysInMonth(now.getFullYear(), now.getMonth()));
     const pastWorkDays = getPastWorkDaysInMonth(now);
-    const todayFraction = Math.min(1, elapsedSecToday / rates.totalDailyWorkSec);
+    const todayFraction = rates.totalDailyWorkSec > 0 ? Math.min(1, elapsedSecToday / rates.totalDailyWorkSec) : 0;
 
     targetVal = rates.monthly;
-    // Earned = (past work days + today fraction) * daily rate
     mainVal = (pastWorkDays + todayFraction) * rates.daily;
     percent = (mainVal / targetVal) * 100;
 
@@ -277,16 +306,15 @@ function updateUI() {
     heroTitleText = "올해 현재까지의 실시간 적립 연봉";
     progressTitleText = "올해 연봉 목표 달성률";
 
-    // Estimate elapsed work days in year
     const startOfYear = new Date(now.getFullYear(), 0, 1);
     let pastWorkDaysYear = 0;
     const tempDate = new Date(startOfYear);
     while (tempDate < new Date(now.getFullYear(), now.getMonth(), now.getDate())) {
       const d = tempDate.getDay();
-      if (d !== 0 && d !== 6) pastWorkDaysYear++;
+      if (state.workDays.includes(d)) pastWorkDaysYear++;
       tempDate.setDate(tempDate.getDate() + 1);
     }
-    const todayFraction = Math.min(1, elapsedSecToday / rates.totalDailyWorkSec);
+    const todayFraction = rates.totalDailyWorkSec > 0 ? Math.min(1, elapsedSecToday / rates.totalDailyWorkSec) : 0;
 
     targetVal = rates.annual;
     mainVal = (pastWorkDaysYear + todayFraction) * rates.daily;
@@ -296,14 +324,14 @@ function updateUI() {
     targetLabelText = `기준 연봉: ₩${Math.round(targetVal).toLocaleString()}`;
   } else { // 'daily'
     heroBadgeText = "일급 (Daily)";
-    heroTitleText = "오늘 8시간 근무 동안 실시간 적립 일급";
-    progressTitleText = "오늘 하루 8시간 근무 진행률";
+    heroTitleText = `오늘 ${(rates.totalDailyWorkSec/3600).toFixed(1)}시간 근무 동안 실시간 적립 일급`;
+    progressTitleText = `오늘 하루 ${(rates.totalDailyWorkSec/3600).toFixed(1)}시간 근무 진행률`;
 
     targetVal = rates.daily;
     mainVal = todayEarned;
-    percent = (elapsedSecToday / rates.totalDailyWorkSec) * 100;
+    percent = rates.totalDailyWorkSec > 0 ? (elapsedSecToday / rates.totalDailyWorkSec) * 100 : 0;
 
-    startLabelText = `출근 (08:30)`;
+    startLabelText = `출근 (${state.workStart})`;
     targetLabelText = `오늘 목표 일급: ₩${Math.round(targetVal).toLocaleString()}`;
   }
 
@@ -340,7 +368,7 @@ function updateUI() {
   if (startLabelEl) startLabelEl.textContent = startLabelText;
   if (targetLabelEl) targetLabelEl.textContent = targetLabelText;
 
-  // 5. Update Rates Breakdown Card
+  // 6. Update Rates Breakdown Card
   const ratePerSecEl = document.getElementById("ratePerSec");
   const ratePerMinEl = document.getElementById("ratePerMin");
   const ratePerHourEl = document.getElementById("ratePerHour");
@@ -351,7 +379,28 @@ function updateUI() {
   if (ratePerHourEl) ratePerHourEl.textContent = `₩ ${Math.round(rates.hourly).toLocaleString()} 원`;
   if (ratePerDayEl) ratePerDayEl.textContent = `₩ ${Math.round(rates.daily).toLocaleString()} 원`;
 
-  // 6. Update Timeline & Summary Card
+  // 7. Dynamic Timeline Card Step Updates
+  const stepStart = document.getElementById("stepStart");
+  const stepLunch = document.getElementById("stepLunch");
+  const stepEnd = document.getElementById("stepEnd");
+
+  if (stepStart) {
+    stepStart.querySelector(".step-time").textContent = state.workStart;
+  }
+  if (stepLunch) {
+    if (state.hasLunch) {
+      stepLunch.style.display = "flex";
+      stepLunch.querySelector(".step-time").textContent = `${state.lunchStart} ~ ${state.lunchEnd}`;
+    } else {
+      stepLunch.style.display = "none";
+    }
+  }
+  if (stepEnd) {
+    stepEnd.querySelector(".step-time").textContent = state.workEnd;
+    stepEnd.querySelector(".step-name").textContent = `퇴근 (총 ${(rates.totalDailyWorkSec/3600).toFixed(1)}시간 소요)`;
+  }
+
+  // 8. Update Timeline Summary Box
   const todayEarnedSumEl = document.getElementById("todayEarnedSum");
   if (todayEarnedSumEl) todayEarnedSumEl.textContent = `₩ ${Math.round(todayEarned).toLocaleString()}`;
 
@@ -367,7 +416,7 @@ function updateUI() {
     }
   }
 
-  // 7. Update Milestone Items
+  // 9. Update Milestones
   updateMilestone("Coffee", 4500, todayEarned, rates);
   updateMilestone("Lunch", 12000, todayEarned, rates);
   updateMilestone("Chicken", 22000, todayEarned, rates);
@@ -383,6 +432,11 @@ function updateMilestone(key, cost, currentEarnedToday, rates) {
   const statusEl = document.getElementById(`statusFor${key}`);
 
   if (!timeEl || !statusEl) return;
+  if (rates.perSec <= 0) {
+    timeEl.textContent = "설정 필요";
+    statusEl.innerHTML = `<span class="status-badge-mini">대기</span>`;
+    return;
+  }
 
   const reqSeconds = cost / rates.perSec;
   const mins = Math.floor(reqSeconds / 60);
@@ -402,6 +456,38 @@ function updateMilestone(key, cost, currentEarnedToday, rates) {
   } else {
     const needMore = cost - currentEarnedToday;
     statusEl.innerHTML = `<span class="status-badge-mini" style="background: rgba(255,255,255,0.06); color: #94a3b8;">차액 ₩${Math.round(needMore).toLocaleString()}</span>`;
+  }
+}
+
+// Recalculate and update the live summary inside the settings modal
+function updateModalSummary() {
+  const startStr = document.getElementById("inputWorkStart").value;
+  const endStr = document.getElementById("inputWorkEnd").value;
+  const hasLunch = document.getElementById("inputHasLunch").checked;
+  const lunchStartStr = document.getElementById("inputLunchStart").value;
+  const lunchEndStr = document.getElementById("inputLunchEnd").value;
+
+  const startSec = parseTimeToSeconds(startStr);
+  const endSec = parseTimeToSeconds(endStr);
+  const lunchStartSec = parseTimeToSeconds(lunchStartStr);
+  const lunchEndSec = parseTimeToSeconds(lunchEndStr);
+
+  let totalSec = 0;
+  if (hasLunch && lunchStartSec > startSec && lunchEndSec > lunchStartSec) {
+    totalSec = Math.max(0, lunchStartSec - startSec) + Math.max(0, endSec - lunchEndSec);
+  } else {
+    totalSec = Math.max(0, endSec - startSec);
+  }
+
+  const hrs = Math.floor(totalSec / 3600);
+  const mins = Math.floor((totalSec % 3600) / 60);
+
+  const activeDays = document.querySelectorAll(".day-pill.active").length;
+  const weeklyHours = (totalSec / 3600 * activeDays).toFixed(1);
+
+  const summaryEl = document.getElementById("modalCalcSummary");
+  if (summaryEl) {
+    summaryEl.textContent = `일일 실근무 ${hrs}시간 ${mins}분 (주 ${activeDays}일, 총 ${weeklyHours}시간/주)`;
   }
 }
 
@@ -449,6 +535,24 @@ function initEvents() {
       document.getElementById("inputWorkEnd").value = state.workEnd;
       document.getElementById("inputLunchStart").value = state.lunchStart;
       document.getElementById("inputLunchEnd").value = state.lunchEnd;
+      document.getElementById("inputHasLunch").checked = state.hasLunch;
+
+      // Update lunch row visibility
+      const lunchRow = document.getElementById("lunchRow");
+      if (lunchRow) lunchRow.style.display = state.hasLunch ? "grid" : "none";
+
+      // Set Day Pills active state
+      const dayPills = document.querySelectorAll(".day-pill");
+      dayPills.forEach((pill) => {
+        const d = Number(pill.dataset.day);
+        if (state.workDays.includes(d)) {
+          pill.classList.add("active");
+        } else {
+          pill.classList.remove("active");
+        }
+      });
+
+      updateModalSummary();
       settingsModal.classList.add("open");
     });
   }
@@ -459,7 +563,6 @@ function initEvents() {
     });
   }
 
-  // Close modal when clicking backdrop
   if (settingsModal) {
     settingsModal.addEventListener("click", (e) => {
       if (e.target === settingsModal) {
@@ -467,6 +570,73 @@ function initEvents() {
       }
     });
   }
+
+  // Lunch Checkbox Toggle
+  const hasLunchCheckbox = document.getElementById("inputHasLunch");
+  if (hasLunchCheckbox) {
+    hasLunchCheckbox.addEventListener("change", (e) => {
+      const lunchRow = document.getElementById("lunchRow");
+      if (lunchRow) lunchRow.style.display = e.target.checked ? "grid" : "none";
+      updateModalSummary();
+    });
+  }
+
+  // Day Pills Click Listener
+  const dayPills = document.querySelectorAll(".day-pill");
+  dayPills.forEach((pill) => {
+    pill.addEventListener("click", () => {
+      pill.classList.toggle("active");
+      updateModalSummary();
+    });
+  });
+
+  // Time Inputs Change Listener
+  const timeInputs = ["inputWorkStart", "inputWorkEnd", "inputLunchStart", "inputLunchEnd"];
+  timeInputs.forEach((id) => {
+    const input = document.getElementById(id);
+    if (input) input.addEventListener("input", updateModalSummary);
+  });
+
+  // Preset Buttons Click Listener
+  const presetBtns = document.querySelectorAll(".preset-btn");
+  presetBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      presetBtns.forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+
+      const preset = btn.dataset.preset;
+      if (preset === "standard") {
+        document.getElementById("inputWorkStart").value = "08:30";
+        document.getElementById("inputWorkEnd").value = "18:00";
+        document.getElementById("inputLunchStart").value = "11:30";
+        document.getElementById("inputLunchEnd").value = "13:00";
+        document.getElementById("inputHasLunch").checked = true;
+      } else if (preset === "nine6") {
+        document.getElementById("inputWorkStart").value = "09:00";
+        document.getElementById("inputWorkEnd").value = "18:00";
+        document.getElementById("inputLunchStart").value = "12:00";
+        document.getElementById("inputLunchEnd").value = "13:00";
+        document.getElementById("inputHasLunch").checked = true;
+      } else if (preset === "eight5") {
+        document.getElementById("inputWorkStart").value = "08:00";
+        document.getElementById("inputWorkEnd").value = "17:00";
+        document.getElementById("inputLunchStart").value = "12:00";
+        document.getElementById("inputLunchEnd").value = "13:00";
+        document.getElementById("inputHasLunch").checked = true;
+      } else if (preset === "ten7") {
+        document.getElementById("inputWorkStart").value = "10:00";
+        document.getElementById("inputWorkEnd").value = "19:00";
+        document.getElementById("inputLunchStart").value = "13:00";
+        document.getElementById("inputLunchEnd").value = "14:00";
+        document.getElementById("inputHasLunch").checked = true;
+      }
+
+      const lunchRow = document.getElementById("lunchRow");
+      if (lunchRow) lunchRow.style.display = "grid";
+
+      updateModalSummary();
+    });
+  });
 
   // Save Settings
   if (settingsForm) {
@@ -477,6 +647,11 @@ function initEvents() {
       state.workEnd = document.getElementById("inputWorkEnd").value;
       state.lunchStart = document.getElementById("inputLunchStart").value;
       state.lunchEnd = document.getElementById("inputLunchEnd").value;
+      state.hasLunch = document.getElementById("inputHasLunch").checked;
+
+      const activePills = document.querySelectorAll(".day-pill.active");
+      const selectedDays = Array.from(activePills).map((p) => Number(p.dataset.day));
+      state.workDays = selectedDays.length > 0 ? selectedDays : [1, 2, 3, 4, 5];
 
       saveSettings();
       settingsModal.classList.remove("open");
@@ -491,13 +666,27 @@ function initEvents() {
       state.lunchStart = "11:30";
       state.lunchEnd = "13:00";
       state.workEnd = "18:00";
+      state.hasLunch = true;
+      state.workDays = [1, 2, 3, 4, 5];
 
       document.getElementById("inputAnnualSalary").value = state.annualSalary;
       document.getElementById("inputWorkStart").value = state.workStart;
       document.getElementById("inputWorkEnd").value = state.workEnd;
       document.getElementById("inputLunchStart").value = state.lunchStart;
       document.getElementById("inputLunchEnd").value = state.lunchEnd;
+      document.getElementById("inputHasLunch").checked = true;
 
+      const dayPills = document.querySelectorAll(".day-pill");
+      dayPills.forEach((p) => {
+        const d = Number(p.dataset.day);
+        if ([1, 2, 3, 4, 5].includes(d)) p.classList.add("active");
+        else p.classList.remove("active");
+      });
+
+      const lunchRow = document.getElementById("lunchRow");
+      if (lunchRow) lunchRow.style.display = "grid";
+
+      updateModalSummary();
       saveSettings();
     });
   }
